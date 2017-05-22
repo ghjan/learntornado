@@ -1,5 +1,6 @@
 from tornado.httpclient import AsyncHTTPClient
 from tornado import gen
+import concurrent.futures
 
 
 async def fetch_async(url):
@@ -26,8 +27,24 @@ def fetch_task(url, cb):
     response = yield gen.Task(asynchronous_fetch_callback, url)
     cb(response)
 
+
 @gen.coroutine
 def asynchronous_fetch_callback(url):
     http_client = AsyncHTTPClient()
     response = yield http_client.fetch(url)
+    return response
+
+
+thread_pool = concurrent.futures.ThreadPoolExecutor(4)
+
+
+@gen.coroutine
+def call_blocking(url):
+    response = yield thread_pool.submit(blocking_func, url)
+    return response.body
+
+
+def blocking_func(url):
+    http_client = AsyncHTTPClient()
+    response = http_client.fetch(url)
     return response

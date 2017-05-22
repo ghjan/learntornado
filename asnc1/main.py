@@ -9,6 +9,7 @@ import logging
 import time
 
 from async_all import fetch_async, fetch_coroutine, fetch_task  # , callback_me
+from async_all import call_blocking
 
 define("port", 8890, help="port", type=int)
 URL_Weather = "https://api.thinkpage.cn/v3/weather/now.json?key=j900cje6kieg3pph&location=shanghai&language=zh-Hans&unit=c"
@@ -27,6 +28,8 @@ class Application(tornado.web.Application):
             (r"/task", TaskHandler),
             (r"/task2", TaskHandler2),
             (r"/atask", AsyncTaskHandler),
+            (r"/block", BlockHandler),
+            (r"/interleave", InterleaveHandler),
         ]
 
         # import pdb        # use pdb to debug is usefully
@@ -66,6 +69,7 @@ class TaskHandler(tornado.web.RequestHandler):
         # tornado.ioloop.IOLoop.current().spawn_callback(fetch_coroutine, URL_Weather)
         self.write("Hello, world:TaskHandler")
 
+
 class TaskHandler2(tornado.web.RequestHandler):
     # @tornado.web.asynchronous
     @tornado.gen.coroutine
@@ -84,6 +88,12 @@ class TaskHandler2(tornado.web.RequestHandler):
             cb(response)
 
         http_client.fetch(url, callback=handle_response)
+
+
+class BlockHandler(tornado.web.RequestHandler):
+    def get(self, *args, **kwargs):
+        call_blocking(URL_Weather)
+        self.write("Hello, world:BlockHandler")
 
 
 class AsyncTaskHandler(tornado.web.RequestHandler):
@@ -106,6 +116,32 @@ class AsyncTaskHandler(tornado.web.RequestHandler):
     def test(self, params):
         time.sleep(2)
         return params
+
+
+class InterleaveHandler(tornado.web.RequestHandler):
+    @gen.coroutine
+    def get(self):
+        fetch_future = fab(10)
+        while True:
+            chunk = yield fetch_future
+            if chunk is None: break
+            self.write(chunk)
+            fetch_future = fab(10)
+            yield self.flush()
+
+    @gen.coroutine
+    def fetch_next_chunk(self, max):
+        yield fab(max)
+
+
+@gen.coroutine
+def fab(max):
+    n, a, b = 0, 0, 1
+    while n < max:
+        yield b
+        # print b
+        a, b = b, a + b
+        n = n + 1
 
 
 def start_web():
